@@ -1,0 +1,10 @@
+apiVersion: v1
+description: Capsule8 - Modernize without compromise.
+name: capsule8
+version: 0.1.0
+icon: https://avatars3.githubusercontent.com/u/22600059
+sources:
+  - https://github.com/capsule8/
+maintainers:
+  - name: Capsule8
+    email: info@capsule8.com

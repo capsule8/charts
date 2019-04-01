@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}-server
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}-server
+    spec:
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: {{ template "fullname" . }}-server
+          image: "{{ .Values.repository }}/capsule8-server:{{ .Values.tag }}"
+          env:
+            - name: CAPSULE8_C8SQLDB_ENABLED
+              value: "true"
+            - name: CAPSULE8_C8SQLDB_DATABASE_DIR
+              value: "/var/lib/capsule8/flushed"
+            - name: CAPSULE8_AUTOMATIC_FLUSH_INTERVAL
+              value: "5m"
+            - name: CAPSULE8_MONITOR_PORT
+              value: "{{ .Values.server.monitoringPort }}"
+          ports:
+            - name: nats
+              containerPort: 4222
+            - name: nats-clustering
+              containerPort: 6222
+            - name: nats-monitoring
+              containerPort: 8222
+            - name: grpc
+              containerPort: 8484
+            - name: httpjson
+              containerPort: 8485
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.server.monitoringPort }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.server.monitoringPort }}
+          volumeMounts:
+            - name: var-lib-capsule8-configs
+              mountPath: /var/lib/capsule8/configs
+            - name: var-lib-capsule8-flushed
+              mountPath: /var/lib/capsule8/flushed
+            - name: var-run-capsule8
+              mountPath: /var/run/capsule8
+      volumes:
+        - name: var-lib-capsule8-configs
+          hostPath:
+            path: /var/lib/capsule8/configs
+        - name: var-lib-capsule8-flushed
+          emptyDir: {}
+        - name: var-run-capsule8
+          hostPath:
+            path: /var/run/capsule8
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "fullname" . }}-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  type: NodePort
+  selector:
+    app: {{ template "name" . }}-server
+  ports:
+    - name: nats
+      port: 4222
+    - name: nats-clustering
+      port: 6222
+    - name: nats-monitoring
+      port: 8222
+    - name: grpc
+      port: 8484
+    - name: httpjson
+      port: 8485

@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-shell
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}-shell
+    spec:
+      containers:
+        - name: {{ template "fullname" . }}-shell
+          image: "{{ .Values.repository }}/capsule8-shell:{{ .Values.tag }}"
+          stdin: true
+          tty: true
+          env:
+            - name: CAPSULE8_SERVER
+              value: {{ template "fullname" . }}-server:8484
+        - name: pause
+          image: gcr.io/google_containers/pause

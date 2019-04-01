@@ -1,0 +1,20 @@
+# Default values for Capsule8
+
+# "repository" must be set to the local registry that contains the capsule8
+# images. The kubernetes cluster must also have pull access to this registry.
+repository: my-registry
+tag: 0.1.58
+
+# This installation assumes that whichever namespace is set here already exists.
+namespace: default
+
+server:
+  monitoringPort: 9011
+
+console:
+  mainPort: 9090
+
+sensor:
+  monitoringPort: 9010
+
+

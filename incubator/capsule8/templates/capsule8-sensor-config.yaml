@@ -1,0 +1,301 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "fullname" . }}-sensor-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+data:
+  # the sensor configuration
+  capsule8-sensor.yaml : |
+    cloud_meta: auto
+    bundler:
+      events_per_message: 1
+    flight_recorder:
+      enabled: true
+      metaevents_whitelist:
+        - shell_command
+        - terminal_write
+        - boot_info
+        - node_metadata
+        - connection
+        - alert
+    investigations:
+      reporting_interval: 10s
+
+  # the capsule8 analytcs configuration that is mounted to the sensor containers
+  capsule8-analytics.yaml: |
+    print_meta_events: true
+    print_alerts: true
+
+    Production File Permissions:
+      policy: chmod
+      enabled: false
+      alertMessage: Permissions Modification Occurred
+      comments: Example strategy using the chmod policy
+      priority: Low
+      rules:
+      - ignore programName in $K8sChmodProgramsList
+      - default match
+      suid: true
+      sgid: true
+      svtx: true
+      rusr: true
+      wusr: true
+      xusr: true
+      rgrp: false
+      wgrp: false
+      xgrp: true
+      roth: false
+      woth: false
+      xoth: true
+
+    K8sChmodProgramsList:
+     type: paths
+     description: Whitelist of authorized programs
+     list:
+     - "docker-containerd-shim"
+     - "dockerd"
+     - "kubectl"
+     - "/proc/self/*"
+
+    Production SELinux:
+      policy: selinux
+      enabled: true
+      alertMessage: SELinux Disabled
+      priority: High
+      rules:
+      - default match
+      comments: Default SELinux Policy
+      default: false
+
+    DPKG Update Whitelist:
+      alertMessage: New File Executed
+      comments: New files should never be executed, this indicates potential compromise
+      enabled: true
+      fileTimeout: 30
+      policy: newFileExec
+      priority: High
+      rules:
+      - ignore programName == "/usr/bin/dpkg"
+      - ignore programName == "/usr/sbin/dpkg-preconfigure"
+      - ignore programName == "/var/lib/dpkg/tmp.ci/preinst"
+      - default match
+
+    Production Kernel Mode:
+      policy: smepSmap
+      enabled: true
+      alertMessage: SMEP/SMAP Disabled
+      priority: High
+      rules:
+      - default match
+      comments: Default SMEP/SMAP Policy
+
+    ThreatIntel Blacklist:
+      policy: connect
+      enabled: true
+      alertMessage: Unauthorized Network Connection
+      priority: Medium
+      rules:
+      - ignore containerName == "*kazoo*" and programName == "*/nc" and programArguments LIKE ".*[Ee][Xx][Pp][Ll][Oo][Ii][Tt]\.[Dd][Ee][Ll][Ii][Vv][Ee][Rr][Yy].*"
+      - match remoteHost == "54.231.113.250/32"
+      - default ignore
+      comments: Blacklist host 54.231.113.250
+
+    Userland Exploits:
+      policy: memoryProtection
+      enabled: true
+      alertMessage: Memory Protection Alert
+      priority: Medium
+      rules:
+      - default match
+      comments: Alerts on RWX memory allocations
+
+    Userland Exploit Attempts:
+      policy: segfault
+      enabled: true
+      alertMessage: Segmentation Fault Threshold
+      priority: Low
+      rules:
+      - default match
+      comments: Alerts when more than 20 segfaults occur in one minute
+      tolerance: 20
+      duration: 60.0
+
+    SSH Audit Trail:
+      policy: interactiveShell
+      enabled: true
+      alertMessage: Standard Interactive Shell Executed
+      priority: Low
+      rules:
+      - match parentProgramName == "/usr/sbin/sshd"
+      - default ignore
+      comments: Alerts on any interactive shell started by SSHD or docker-runc
+
+    Process Manipulation:
+      policy: ptrace
+      enabled: true
+      alertMessage: Ptrace Invoked
+      priority: High
+      rules:
+      - default match
+      comments: Alerts upon use of debug functions such as ptrace and process_vm_writev
+
+    Kernel Exploits:
+      policy: kernelPayload
+      enabled: true
+      alertMessage: Kernel Exploitation
+      priority: High
+      rules:
+      - ignore containerName == "*target2*"
+      - default match
+      comments: Alerts when a function unexpectedly returns to userland
+      extraLargeMemorySystems: false
+
+    Kernel Exploits Enforcing:
+      policy: kernelPayload
+      enabled: true
+      alertMessage: Kernel Exploitation
+      priority: High
+      rules:
+      - match containerName == "*target2*"
+      - default ignore
+      comments: Alerts when a function unexpectedly returns to userland
+      extraLargeMemorySystems: false
+      responseAction: kill
+
+    Credential Exploit:
+      policy: privilegeEscalation
+      enabled: true
+      alertMessage: Privilege Escalation Alert
+      priority: High
+      rules:
+      - default match
+      comments: Alerts when a program attempts to elevate privileges through unusual means
+
+    Non-standard Interactive Shell Policy:
+      policy: interactiveShell
+      enabled: true
+      alertMessage: Non-standard Interactive Shell Executed
+      priority: High
+      rules:
+        - ignore parentProgramName == "/usr/sbin/sshd"
+        - ignore parentProgramName == "/usr/bin/docker-runc" and containerName != ""
+        - ignore containerName == "*target2*"
+        - default match
+      comments: Alerts on any interactive shell not started by SSHD or docker-runc
+      alertOnIncompleteData: true
+
+    Enforcing Non-standard Interactive Shell Policy:
+      policy: interactiveShell
+      responseAction: kill
+      enabled: true
+      alertMessage: Non-standard Interactive Shell Executed
+      priority: Low
+      rules:
+        - ignore parentProgramName == "/usr/sbin/sshd"
+        - ignore parentProgramName == "/usr/bin/docker-runc"
+        - match containerName    == "*target2*"
+        - default ignore
+      comments: Alerts on any interactive shell not started by SSHD or docker-runc
+      alertOnIncompleteData: true
+
+    FIM Example:
+      policy: filemonitor
+      enabled: true
+      priority: Low
+      comments: Alert on any changes in /home/capsule8/example/*
+      alertMessage: Suspicious operation on file
+      rules:
+        - match filePath == "/home/capsule8/example/*"
+        - default ignore
+      responseAction: alert
+
+    AllowedServerPorts:
+      type: numbers
+      description: Only used for Bookmarker
+      list:
+        - 80
+
+    ServerWLExample:
+      policy: networkService
+      enabled: true
+      priority: High
+      comments: Generally auto-generate from a manifest
+      alertMessage: Disallowed network service
+      rules:
+    #    - ignore inboundHost == "127.0.0.0/8"
+        - ignore containerName != "*bookmarker*"
+        - ignore inboundPort in $AllowedServerPorts
+        - default match
+      responseAction: alert
+
+    Exempting Kazoo Daemon:
+      policy: filemonitor
+      enabled: true
+      priority: Low
+      comments: Exempts kazood from changes.
+      alertMessage: Suspicious operation on file
+      rules:
+        - ignore programName == "/usr/local/bin/klaunch" and programArguments == "klaunch /usr/local/bin/kazoo-server"
+        - ignore programName == "/usr/bin/python2.7" and programArguments == "klaunch /usr/local/bin/kazoo-server"
+        - match filePath == "/home/capsule8/example2/*"
+        - default ignore
+      responseAction: alert
+
+    Final Kazoo Policy:
+      policy: filemonitor
+      enabled: true
+      priority: Low
+      comments: Exempts kazood from changes.
+      alertMessage: Suspicious operation on file
+      rules:
+        - match  programName == "/usr/local/bin/klaunch" and parentProgramName == "/bin/bash" and filePath == "/home/capsule8/example3/*"
+        - match  programName == "/usr/bin/python2.7" and parentProgramName == "/bin/bash" and filePath == "/home/capsule8/example3/*"
+        - ignore programName == "/usr/local/bin/klaunch" and programArguments == "klaunch /usr/local/bin/kazoo-server"
+        - ignore programName == "/usr/bin/python2.7" and programArguments == "klaunch /usr/local/bin/kazoo-server"
+        - match filePath == "/home/capsule8/example3/*"
+        - default ignore
+      responseAction: alert
+
+    # STEP 1:
+    # a) Comment out WGET Blacklist 1 by adding # to the beginning of each line
+    # b) Uncomment WGET Blacklist 2 by removing the #'s (and nothing else) from each line
+    # c) Save the file, and exit.  The new configuration will load.
+
+    WGET Blacklist 1:
+      policy: program
+      enabled: true
+      alertMessage: Unauthorized Program Execution
+      priority: Medium
+      rules:
+      - match programName == "*/wget"
+      - default ignore
+      comments: Alert on usage of the wget command
+
+    #WGET Blacklist 2:
+    #  policy: program
+    #  enabled: true
+    #  alertMessage: Unauthorized Program Execution
+    #  priority: Medium
+    #  rules:
+    #  - ignore containerName == "*bookmarker*"
+    #  - match programName == "*/wget"
+    #  - default ignore
+    #  comments: Alert on usage of the wget command
+
+    # STEP 2:
+    # a) Comment out WGET Blacklist 2
+    # b) Comment in WGET Blacklist 3
+    # c) Save the file, and exit.
+
+    #WGET Blacklist 3:
+    #  policy: program
+    #  enabled: true
+    #  alertMessage: Unauthorized Program Execution
+    #  priority: Medium
+    #  rules:
+    #    - ignore containerName == "*capsule8-bookmarker*" and parentProgramArguments like "sh -c cd /webserver/public_html/; wget -r[/\\w\\d\.]*"
+    #    - match programName == "*/wget"
+    #    - default ignore
+    #  comments: Alert on usage of the wget command
