@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-console
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}-console
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}-console
+    spec:
+      containers:
+        - name: {{ template "fullname" . }}-console
+          image: "{{ .Values.repository }}/capsule8-console:{{ .Values.tag }}"
+          env:
+            - name: CAPSULE8_ADDRESS
+              value: "0.0.0.0:{{ .Values.console.addressPort }}"
+            - name: CAPSULE8_FRONTEND
+              value: "http://localhost:8080"
+            - name: CAPSULE8_MONITOR_PORT
+              value: "{{ .Values.console.monitoringPort }}"
+            - name: CAPSULE8_SERVER
+              value: {{ template "fullname" . }}-server:8484
+            - name: CAPSULE8_POSTGRES
+              value: postgresql://console:console@{{ template "fullname" . }}-postgres:5432/console?sslmode=disable
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.console.monitoringPort }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.console.monitoringPort }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}-postgres
+  template:
+    metadata:
+      labels:
+        app: {{ template "name" . }}-postgres
+    spec:
+      containers:
+        - name: {{ template "fullname" . }}-postgres
+          args:
+            - -c
+            - log_min_duration_statement=500
+          image: postgres:9.6.10-alpine
+          env:
+            - name: POSTGRES_USER
+              value: console
+            - name: POSTGRES_PASSWORD
+              value: console
+          ports:
+            - name: main
+              containerPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "fullname" . }}-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ template "name" . }}-postgre
+  ports:
+    - name: main
+      port: 5432

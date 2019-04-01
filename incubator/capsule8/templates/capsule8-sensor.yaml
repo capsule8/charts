@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ template "fullname" . }}-sensor
+  namespace: {{ .Values.namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "name" . }}-sensor
+  template:
+    metadata:
+      labels:
+        app: capsule8-sensor
+    spec:
+      hostPID: true
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: {{ template "fullname" . }}-sensor
+          image: "{{ .Values.repository }}/capsule8-sensor:{{ .Values.tag }}"
+          env:
+            - name: CAPSULE8_RUN_WITHOUT_SERVER
+              value: "false"
+            - name: CAPSULE8_NATS_URL
+              value: nats://{{ template "fullname" . }}-server:4222
+            - name: CAPSULE8_MONITOR_PORT
+              value: "{{ .Values.sensor.monitoringPort }}"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.sensor.monitoringPort }}
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.sensor.monitoringPort }}
+            initialDelaySeconds: 5
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              memory: 1Gi
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+              - SYS_ADMIN
+              - SYS_PTRACE
+              - KILL
+              - DAC_OVERRIDE
+              - IPC_LOCK
+              - FOWNER
+              - CHOWN
+          volumeMounts:
+            - name: capsule8-sensor-config
+              mountPath: /etc/capsule8
+            - name: cgroup
+              mountPath: /var/run/capsule8/mnt/sys/fs/cgroup
+              readOnly: true
+            - name: debugfs
+              mountPath: /var/run/capsule8/mnt/sys/kernel/debug
+            - name: proc
+              mountPath: /var/run/capsule8/mnt/proc
+              readOnly: true
+            - name: var-lib-docker
+              mountPath: /var/lib/docker
+              readOnly: true
+            - name: var-run-docker
+              mountPath: /var/run/docker
+              readOnly: true
+            - name: hostname
+              mountPath: /var/run/capsule8/mnt/hostname
+              readOnly: true
+      volumes:
+        - name: capsule8-sensor-config
+          configMap:
+            name: {{ template "fullname" . }}-sensor-config
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+        - name: debugfs
+          hostPath:
+            path: /sys/kernel/debug
+        - name: hostname
+          hostPath:
+            path: /etc/hostname
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: var-lib-docker
+          hostPath:
+            path: /var/lib/docker
+        - name: var-run-docker
+          hostPath:
+            path: /var/run/docker
